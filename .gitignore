@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.ipynb_checkpoints/
+.DS_Store
+test.py
+
+# Model files: too large for git, keep them elsewhere
+models/
+*.safetensors
+*.onnx
+*.bin
+*.pt
+
+# Secrets
+.env
+*.key
+
+# Real user comments and labelling files (personal data)
+data/
+my_comments*.csv
+odia_*.csv
+*_to_label.csv
+scored.csv
+EOF
