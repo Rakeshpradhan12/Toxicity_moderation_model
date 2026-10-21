@@ -1,0 +1,15 @@
+services:
+  moderation-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: toxicity-moderation-api
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    volumes:
+      # Mount models and weights so downloaded S3 weights persist across container restarts
+      - ./models:/app/models
+      - ./weights:/app/weights
+    restart: unless-stopped

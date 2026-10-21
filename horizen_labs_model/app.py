@@ -11,6 +11,7 @@ import re
 import threading
 import unicodedata
 from collections import Counter
+from pathlib import Path
 from typing import List, Literal, Optional
 
 import torch
@@ -19,10 +20,18 @@ from pydantic import BaseModel, Field
 from transformers import AutoModelForSequenceClassification, AutoTokenizer
 import hmac
 
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
 # ----------------------------------------------------------------------------
 # Settings you may want to change
 # ----------------------------------------------------------------------------
 MODEL_DIR = os.environ.get("MODEL_DIR", "models/ft_best")
+MODEL_S3_BUCKET = os.environ.get("MODEL_S3_BUCKET", "nagatharun")
+MODEL_S3_PREFIX = os.environ.get("MODEL_S3_PREFIX", "ml-models/ft_best/v1/")
 API_KEYS = [k for k in os.environ.get("API_KEYS", os.environ.get("API_KEY", "")).split(",") if k]       # if set, callers must send header X-API-Key
 MAX_LEN = 256                              # tokens per chunk (a token is a piece of a word, not a character)
 LONG_TEXT_OVERLAP = 32                     # tokens shared by neighbouring chunks, so nothing is split unseen
@@ -72,7 +81,40 @@ REVIEW_PHRASES = {"en": [], "hi": [], "hin": ["bc", "mc", "bsdk", "lauda"], "or"
 # ----------------------------------------------------------------------------
 # Model loading (once, at startup)
 # ----------------------------------------------------------------------------
-device = "mps" if torch.backends.mps.is_available() else "cpu"
+def _ensure_local_model():
+    model_path = Path(MODEL_DIR)
+    if not (model_path.is_dir() and (model_path / "config.json").exists()):
+        print(f"Model files not found in '{MODEL_DIR}'. Checking S3...")
+        if MODEL_S3_BUCKET and MODEL_S3_PREFIX:
+            try:
+                import boto3
+                s3 = boto3.client("s3", region_name=os.environ.get("AWS_REGION"))
+                prefix = MODEL_S3_PREFIX.strip("/") + "/"
+                paginator = s3.get_paginator("list_objects_v2")
+                objects = []
+                for page in paginator.paginate(Bucket=MODEL_S3_BUCKET, Prefix=prefix):
+                    objects += [o for o in page.get("Contents", []) if not o["Key"].endswith("/")]
+                if objects:
+                    print(f"Downloading {len(objects)} files from s3://{MODEL_S3_BUCKET}/{prefix} to {MODEL_DIR}...")
+                    for o in objects:
+                        rel = o["Key"][len(prefix):]
+                        target = model_path / rel
+                        if target.exists() and target.stat().st_size == o["Size"]:
+                            continue
+                        target.parent.mkdir(parents=True, exist_ok=True)
+                        print(f"  downloading {rel} ({o['Size'] / 1e6:.1f} MB)")
+                        s3.download_file(MODEL_S3_BUCKET, o["Key"], str(target))
+                    print("Model downloaded successfully from S3.")
+            except Exception as e:
+                print(f"Warning: Could not download model from S3: {e}")
+
+_ensure_local_model()
+
+device = (
+    "cuda" if torch.cuda.is_available()
+    else "mps" if hasattr(torch.backends, "mps") and torch.backends.mps.is_available()
+    else "cpu"
+)
 tokenizer = AutoTokenizer.from_pretrained(MODEL_DIR)
 model = AutoModelForSequenceClassification.from_pretrained(MODEL_DIR).to(device).eval()
 ID2LABEL = model.config.id2label
