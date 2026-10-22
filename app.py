@@ -105,7 +105,13 @@ def root_info() -> Dict[str, Any]:
             "image_moderation": ENABLE_IMAGE_MODERATION,
         },
         "endpoints": {
-            "text": ["/moderate", "/moderate/batch", "/api/v1/moderate-text", "/api/v1/moderate-text/batch"],
+            "text": [
+                "/moderate",
+                "/moderate/batch",
+                "/api/v1/moderate-text",
+                "/api/v1/moderate-text/batch",
+                "/api/v1/moderate-text/async",
+            ],
             "image": ["/api/v1/moderate-image", "/api/v1/moderate-image/async"],
             "tasks": ["/api/v1/tasks/{task_id}"],
             "system": ["/health", "/ready", "/metrics", "/docs"],

@@ -147,8 +147,12 @@ def run_benchmark_batch(
         url = f"{base}/metrics"
         method = "GET"
         body = None
-    elif endpoint == "text":
-        url = f"{base}/api/v1/moderate-text"
+    elif endpoint in ("text", "text-async"):
+        url = (
+            f"{base}/api/v1/moderate-text/async"
+            if endpoint == "text-async"
+            else f"{base}/api/v1/moderate-text"
+        )
         method = "POST"
         headers["Content-Type"] = "application/json"
     elif endpoint in ("image", "image-async"):
@@ -324,9 +328,9 @@ def main():
     parser.add_argument(
         "-e",
         "--endpoint",
-        choices=["text", "image", "image-async", "health", "metrics", "all"],
+        choices=["text", "text-async", "image", "image-async", "health", "metrics", "all"],
         default="text",
-        help="Endpoint to test (default: text, image, image-async, health, metrics)",
+        help="Endpoint to test (default: text, text-async, image, image-async, health, metrics)",
     )
     parser.add_argument(
         "-c",
