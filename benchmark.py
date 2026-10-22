@@ -138,15 +138,15 @@ def run_benchmark_batch(
     if api_key:
         headers["X-API-Key"] = api_key
 
+    body = None
+
     # Prepare payloads
     if endpoint == "health":
         url = f"{base}/health"
         method = "GET"
-        body = None
     elif endpoint == "metrics":
         url = f"{base}/metrics"
         method = "GET"
-        body = None
     elif endpoint in ("text", "text-async"):
         url = (
             f"{base}/api/v1/moderate-text/async"
@@ -179,7 +179,7 @@ def run_benchmark_batch(
     wall_start = time.perf_counter()
 
     def worker(idx: int) -> Tuple[int, float, Optional[str]]:
-        if endpoint == "text":
+        if endpoint in ("text", "text-async"):
             text_item = SAMPLE_TEXTS[idx % len(SAMPLE_TEXTS)]
             req_data = json.dumps({"text": text_item}).encode("utf-8")
         else:
