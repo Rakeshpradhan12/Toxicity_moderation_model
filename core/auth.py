@@ -18,9 +18,12 @@ def get_configured_api_keys() -> list[str]:
 
 def verify_api_key(x_api_key: Optional[str] = Header(default=None)) -> None:
     api_keys = get_configured_api_keys()
-    require_key = os.getenv("REQUIRE_API_KEY", "").lower() in ("1", "true", "yes")
+    require_key = os.getenv("REQUIRE_API_KEY", "false").lower() in ("1", "true", "yes")
 
-    if not api_keys and not require_key:
+    if not require_key:
+        return
+
+    if not api_keys:
         return
 
     if not x_api_key:

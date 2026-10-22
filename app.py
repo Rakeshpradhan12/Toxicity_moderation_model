@@ -100,7 +100,7 @@ def root_info() -> Dict[str, Any]:
         "endpoints": {
             "text": ["/moderate", "/moderate/batch", "/api/v1/moderate-text", "/api/v1/moderate-text/batch"],
             "image": ["/api/v1/moderate-image"],
-            "system": ["/health", "/ready", "/docs"],
+            "system": ["/health", "/ready", "/metrics", "/docs"],
         },
     }
 
@@ -116,6 +116,73 @@ def health() -> Dict[str, Any]:
         "image_moderator_loaded": image_ready,
         "text_device": getattr(app.state.text_moderator, "device", None) if text_ready else None,
     }
+
+
+def _get_system_metrics() -> Dict[str, Any]:
+    load_1, load_5, load_15 = os.getloadavg() if hasattr(os, "getloadavg") else (0.0, 0.0, 0.0)
+    cpu_count = os.cpu_count() or 1
+
+    mem_total_mb = 0.0
+    mem_used_mb = 0.0
+    mem_percent = 0.0
+    if os.path.exists("/proc/meminfo"):
+        try:
+            mem = {}
+            with open("/proc/meminfo", "r") as f:
+                for line in f:
+                    parts = line.split(":")
+                    if len(parts) == 2:
+                        k = parts[0].strip()
+                        v = parts[1].strip().split()[0]
+                        if v.isdigit():
+                            mem[k] = int(v) * 1024
+            total = mem.get("MemTotal", 1)
+            avail = mem.get("MemAvailable", 0)
+            used = total - avail
+            mem_total_mb = round(total / (1024 * 1024), 1)
+            mem_used_mb = round(used / (1024 * 1024), 1)
+            mem_percent = round((used / total) * 100, 1)
+        except Exception:
+            pass
+
+    process_rss_mb = 0.0
+    if os.path.exists("/proc/self/statm"):
+        try:
+            with open("/proc/self/statm", "r") as f:
+                fields = f.read().split()
+                if len(fields) >= 2:
+                    pages = int(fields[1])
+                    page_size = os.sysconf("SC_PAGE_SIZE") if hasattr(os, "sysconf") else 4096
+                    process_rss_mb = round((pages * page_size) / (1024 * 1024), 1)
+        except Exception:
+            pass
+
+    return {
+        "cpu": {
+            "cores": cpu_count,
+            "load_avg_1m": round(load_1, 2),
+            "load_avg_5m": round(load_5, 2),
+            "load_avg_15m": round(load_15, 2),
+            "estimated_cpu_utilization_pct": min(100.0, round((load_1 / cpu_count) * 100, 1)),
+        },
+        "memory": {
+            "total_mb": mem_total_mb,
+            "used_mb": mem_used_mb,
+            "used_pct": mem_percent,
+            "process_rss_mb": process_rss_mb,
+        },
+    }
+
+
+@app.get("/metrics", summary="System & Model Metrics")
+@app.get("/api/v1/metrics", summary="System & Model Metrics")
+def metrics() -> Dict[str, Any]:
+    sys_metrics = _get_system_metrics()
+    sys_metrics["models"] = {
+        "text_moderator_loaded": app.state.text_moderator is not None,
+        "image_moderator_loaded": app.state.image_moderator is not None,
+    }
+    return sys_metrics
 
 
 @app.get("/ready", summary="Readiness probe")

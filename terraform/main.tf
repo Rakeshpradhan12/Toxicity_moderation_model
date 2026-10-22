@@ -26,6 +26,13 @@ data "aws_vpc" "default" {
   default = true
 }
 
+# Select default subnet in Availability Zone B (verified available capacity for c7i-flex.large)
+data "aws_subnet" "selected" {
+  vpc_id            = data.aws_vpc.default.id
+  availability_zone = "${var.aws_region}b"
+  default_for_az    = true
+}
+
 # ----------------------------------------------------------------------------
 # 1. Automatic SSH Key Pair Generation
 # ----------------------------------------------------------------------------
@@ -125,6 +132,7 @@ resource "aws_instance" "moderation_server" {
   instance_type               = var.instance_type
   key_name                    = aws_key_pair.generated_key.key_name
   vpc_security_group_ids      = [aws_security_group.moderation_sg.id]
+  subnet_id                   = data.aws_subnet.selected.id
   associate_public_ip_address = true
 
   root_block_device {
@@ -138,50 +146,50 @@ resource "aws_instance" "moderation_server" {
   }
 
   # Automated server bootstrap script
-  user_data = <<-EOF
-              #!/bin/bash
-              set -e
+  user_data = <<EOF
+#!/bin/bash
+set -e
 
-              # 1. Setup 4 GB swap file for safety
-              if [ ! -f /swapfile ]; then
-                  fallocate -l 4G /swapfile
-                  chmod 600 /swapfile
-                  mkswap /swapfile
-                  swapon /swapfile
-                  echo '/swapfile none swap sw 0 0' >> /etc/fstab
-              fi
+# 1. Setup 4 GB swap file for safety
+if [ ! -f /swapfile ]; then
+    fallocate -l 4G /swapfile
+    chmod 600 /swapfile
+    mkswap /swapfile
+    swapon /swapfile
+    echo '/swapfile none swap sw 0 0' >> /etc/fstab
+fi
 
-              # 2. Update and install packages
-              apt-get update -y
-              apt-get install -y ca-certificates curl gnupg git
+# 2. Update and install packages
+apt-get update -y
+apt-get install -y ca-certificates curl gnupg git
 
-              # 3. Install Docker and Docker Compose plugin
-              install -m 0755 -d /etc/apt/keyrings
-              curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
-              chmod a+r /etc/apt/keyrings/docker.asc
-              echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null
-              apt-get update -y
-              apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+# 3. Install Docker and Docker Compose plugin
+install -m 0755 -d /etc/apt/keyrings
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+chmod a+r /etc/apt/keyrings/docker.asc
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null
+apt-get update -y
+apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
 
-              # 4. Enable and start Docker service
-              systemctl enable docker
-              systemctl start docker
-              usermod -aG docker ubuntu
+# 4. Enable and start Docker service
+systemctl enable docker
+systemctl start docker
+usermod -aG docker ubuntu
 
-              # 5. Clone production branch from GitHub
-              mkdir -p /home/ubuntu/app
-              git clone -b production https://github.com/Rakeshpradhan12/Toxicity_moderation_model.git /home/ubuntu/app
+# 5. Clone production branch from GitHub
+mkdir -p /home/ubuntu/app
+git clone -b production https://github.com/Rakeshpradhan12/Toxicity_moderation_model.git /home/ubuntu/app
 
-              # 6. Securely write .env from local machine (never committed to GitHub!)
-              cat <<'ENV_EOF' > /home/ubuntu/app/.env
+# 6. Securely write .env from local machine (never committed to GitHub!)
+cat <<'ENV_EOF' > /home/ubuntu/app/.env
 ${file("${path.module}/../.env")}
 ENV_EOF
-              chown -R ubuntu:ubuntu /home/ubuntu/app
+chown -R ubuntu:ubuntu /home/ubuntu/app
 
-              # 7. Launch application with Docker Compose
-              cd /home/ubuntu/app
-              docker compose up -d --build
-              EOF
+# 7. Launch application with Docker Compose
+cd /home/ubuntu/app
+docker compose up -d --build
+EOF
 
   tags = {
     Name = var.instance_name
