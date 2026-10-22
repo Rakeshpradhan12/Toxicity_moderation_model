@@ -6,7 +6,7 @@ import logging
 import os
 from time import perf_counter
 
-from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from starlette.concurrency import run_in_threadpool
 
 from core.auth import verify_api_key
@@ -68,7 +68,7 @@ async def moderate_image(request: Request, file: UploadFile = File(...)) -> dict
 )
 async def moderate_image_async(
     file: UploadFile = File(...),
-    webhook_url: Optional[str] = None,
+    webhook_url: Optional[str] = Form(default=None),
 ) -> dict:
     from core.task_queue import task_queue
 
