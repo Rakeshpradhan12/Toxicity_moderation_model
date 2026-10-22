@@ -58,3 +58,37 @@ async def moderate_image(request: Request, file: UploadFile = File(...)) -> dict
         "image_height": height,
         "inference_time_ms": round((perf_counter() - started) * 1000, 2),
     }
+
+
+@router.post(
+    "/api/v1/moderate-image/async",
+    status_code=202,
+    summary="Enqueue image for asynchronous moderation (Returns 202 immediately)",
+)
+async def moderate_image_async(
+    file: UploadFile = File(...),
+    webhook_url: Optional[str] = None,
+) -> dict:
+    from core.task_queue import task_queue
+
+    data = await file.read(MAX_IMAGE_BYTES + 1)
+    if not data:
+        raise HTTPException(status_code=400, detail="Empty image")
+    if len(data) > MAX_IMAGE_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail=f"Image exceeds the {MAX_IMAGE_BYTES}-byte limit",
+        )
+
+    task_id = await task_queue.enqueue_image_task(
+        image_bytes=data,
+        filename=file.filename or "upload.jpg",
+        webhook_url=webhook_url,
+    )
+
+    return {
+        "task_id": task_id,
+        "status": "queued",
+        "message": "Image successfully queued for moderation",
+        "check_status_url": f"/api/v1/tasks/{task_id}",
+    }

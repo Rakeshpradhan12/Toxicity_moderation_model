@@ -12,13 +12,14 @@ from contextlib import asynccontextmanager
 from typing import Any, Dict
 
 from dotenv import load_dotenv
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from starlette.concurrency import run_in_threadpool
 
 # Load environment variables from .env if present
 load_dotenv()
 
 from core.auth import get_configured_api_keys
+from core.task_queue import task_queue
 from image_moderation.moderator import ImageModerator
 from image_moderation.router import router as image_router
 from text_moderation.moderator import TextModerator
@@ -70,7 +71,13 @@ async def lifespan(app: FastAPI):
             except Exception:
                 logger.exception("Failed to load Image Moderator during startup.")
 
+    # Start asynchronous queue background workers
+    task_queue.start_workers(app)
+
     yield
+
+    # Clean shutdown of queue workers
+    await task_queue.stop_workers()
 
 
 app = FastAPI(
@@ -99,7 +106,8 @@ def root_info() -> Dict[str, Any]:
         },
         "endpoints": {
             "text": ["/moderate", "/moderate/batch", "/api/v1/moderate-text", "/api/v1/moderate-text/batch"],
-            "image": ["/api/v1/moderate-image"],
+            "image": ["/api/v1/moderate-image", "/api/v1/moderate-image/async"],
+            "tasks": ["/api/v1/tasks/{task_id}"],
             "system": ["/health", "/ready", "/metrics", "/docs"],
         },
     }
@@ -182,7 +190,16 @@ def metrics() -> Dict[str, Any]:
         "text_moderator_loaded": app.state.text_moderator is not None,
         "image_moderator_loaded": app.state.image_moderator is not None,
     }
+    sys_metrics["queue"] = task_queue.get_metrics()
     return sys_metrics
+
+
+@app.get("/api/v1/tasks/{task_id}", summary="Get asynchronous moderation task status and result")
+def get_task(task_id: str) -> Dict[str, Any]:
+    task = task_queue.get_task(task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
+    return task
 
 
 @app.get("/ready", summary="Readiness probe")

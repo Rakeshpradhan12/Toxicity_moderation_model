@@ -13,6 +13,8 @@ ENV/
 models/
 weights/
 .cache/
+tasks_data/
+*.db
 
 # Environment files
 .env

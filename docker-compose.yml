@@ -12,4 +12,5 @@ services:
       # Mount models and weights so downloaded S3 weights persist across container restarts
       - ./models:/app/models
       - ./weights:/app/weights
+      - ./tasks_data:/app/tasks_data
     restart: unless-stopped

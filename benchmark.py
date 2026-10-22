@@ -151,8 +151,12 @@ def run_benchmark_batch(
         url = f"{base}/api/v1/moderate-text"
         method = "POST"
         headers["Content-Type"] = "application/json"
-    elif endpoint == "image":
-        url = f"{base}/api/v1/moderate-image"
+    elif endpoint in ("image", "image-async"):
+        url = (
+            f"{base}/api/v1/moderate-image/async"
+            if endpoint == "image-async"
+            else f"{base}/api/v1/moderate-image"
+        )
         method = "POST"
         raw_jpeg = create_minimal_jpeg()
         body, ct = build_multipart_body(raw_jpeg)
@@ -190,7 +194,7 @@ def run_benchmark_batch(
     wall_duration = time.perf_counter() - wall_start
     monitor.stop()
 
-    successful = status_codes.get(200, 0)
+    successful = status_codes.get(200, 0) + status_codes.get(202, 0)
     failed = total_requests - successful
     rps = total_requests / wall_duration if wall_duration > 0 else 0
 
@@ -314,15 +318,15 @@ def main():
     )
     parser.add_argument(
         "--url",
-        default="http://15.252.165.9:8000",
-        help="Base URL of the service (default: http://15.252.165.9:8000)",
+        default="http://16.4.35.187:8000",
+        help="Base URL of the service (default: http://16.4.35.187:8000)",
     )
     parser.add_argument(
         "-e",
         "--endpoint",
-        choices=["text", "image", "health", "metrics", "all"],
+        choices=["text", "image", "image-async", "health", "metrics", "all"],
         default="text",
-        help="Endpoint to test (default: text)",
+        help="Endpoint to test (default: text, image, image-async, health, metrics)",
     )
     parser.add_argument(
         "-c",
